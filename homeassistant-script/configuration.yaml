@@ -1,0 +1,193 @@
+
+# Home Assistant 主配置文件
+# 本文件定义了Home Assistant的核心配置和模块化结构
+
+# =============================================================================
+# 基础配置
+# =============================================================================
+
+# 默认集成配置 - 加载Home Assistant的默认集成组件
+# 包含常用功能如天气、地图、日志、设备发现等，请勿移除
+# 详细说明: https://www.home-assistant.io/integrations/default_config/
+default_config:
+
+# =============================================================================
+# 前端配置
+# =============================================================================
+
+# 前端配置 - 控制Home Assistant的用户界面
+frontend:
+  # 从themes文件夹加载自定义主题
+  # 主题文件需放置在config目录下的themes文件夹中ƒƒ
+  themes: !include_dir_merge_named themes
+
+# =============================================================================
+# 模块化配置引用
+# =============================================================================
+
+# 自动化配置 - 引用外部的automations.yaml文件
+# 所有自动化规则都应在该文件中定义
+automation: !include automations.yaml
+
+# 脚本配置 - 引用外部的scripts.yaml文件
+# 所有脚本都应在该文件中定义
+script: !include scripts.yaml
+
+# 场景配置 - 引用外部的scenes.yaml文件
+# 所有场景都应在该文件中定义
+scene: !include scenes.yaml
+
+# =============================================================================
+# 可选配置项示例
+# =============================================================================
+
+# 以下是一些常用配置项的示例，取消注释并根据需要进行配置
+
+# 日志配置
+# logger:
+#   default: info
+#   logs:
+#     homeassistant.components.light: debug
+
+# HTTP配置 - 用于远程访问
+# http:
+#   ssl_certificate: /ssl/fullchain.pem
+#   ssl_key: /ssl/privkey.pem
+#   server_port: 8123
+
+# 时间日期格式配置
+# homeassistant:
+#   customize:
+#     sensor.date: 
+#       friendly_name: "日期"
+#     sensor.time: 
+#       friendly_name: "时间"
+
+# HTTP配置
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - YOUR_REVERSE_PROXY_IP  # 这里填写你的反向代理服务器IP
+    # 如果有多个反向代理，继续添加其他IP，例如：
+    # - 192.168.1.100
+
+# =============================================================================
+# 模板开关配置
+# =============================================================================
+
+# 模板开关 - 允许基于其他实体状态或条件创建自定义开关
+# 可以直接在configuration.yaml中添加，也可以创建单独的文件并引用
+
+# 简化版显示器输入源灯光模板
+# 此配置文件提供了一个更简洁的方式，将显示器输入源切换功能配置为灯光实体
+
+# 定义shell命令
+shell_command:
+  switch_monitor1_to_windows: 'ssh YOUR_MAC_USERNAME@YOUR_MAC_IP "bash /path/to/your/Screen11.sh"'
+  switch_monitor1_to_macos: 'ssh YOUR_MAC_USERNAME@YOUR_MAC_IP "bash /path/to/your/Screen12.sh"'
+  switch_monitor2_to_windows: 'ssh YOUR_MAC_USERNAME@YOUR_MAC_IP "bash /path/to/your/Screen21.sh"'
+  switch_monitor2_to_macos: 'ssh YOUR_MAC_USERNAME@YOUR_MAC_IP "bash /path/to/your/Screen22.sh"'
+  shutdown_remote_windows: 'ssh YOUR_MAC_USERNAME@YOUR_MAC_IP "bash /path/to/your/shutdown-remote.sh"'
+
+# 定义灯光实体
+light:
+  - platform: template
+    lights:
+      # 显示器1输入源灯光
+      monitor1_input: 
+        friendly_name: "LG显示器"
+        unique_id: "template_light_monitor1_input"
+        value_template: "{{ states('input_text.monitor1_state') == 'windows' }}"
+        turn_on:
+          - service: shell_command.switch_monitor1_to_windows
+          - service: input_text.set_value
+            target:
+              entity_id: input_text.monitor1_state
+            data:
+              value: 'windows'
+        turn_off:
+          - service: shell_command.switch_monitor1_to_macos
+          - service: input_text.set_value
+            target:
+              entity_id: input_text.monitor1_state
+            data:
+              value: 'macos'
+
+      # 显示器2输入源灯光
+      monitor2_input: 
+        friendly_name: "AG显示器"
+        unique_id: "template_light_monitor2_input"
+        value_template: "{{ states('input_text.monitor2_state') == 'windows' }}"
+        turn_on:
+          - service: shell_command.switch_monitor2_to_windows
+          - service: input_text.set_value
+            target:
+              entity_id: input_text.monitor2_state
+            data:
+              value: 'windows'
+        turn_off:
+          - service: shell_command.switch_monitor2_to_macos
+          - service: input_text.set_value
+            target:
+              entity_id: input_text.monitor2_state
+            data:
+              value: 'macos'
+
+      # 远程开关机灯控制
+      windows11_power: 
+        friendly_name: "Windows11"
+        unique_id: "template_light_windows11_power"
+        value_template: "{{ states('input_boolean.remote_shutdown_switch') }}"
+        turn_on:
+          - service: button.press
+            target:
+              entity_id: button.wake_on_lan_e8_9c_25_7d_2f_7e
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.remote_shutdown_switch
+        turn_off:
+          - service: shell_command.shutdown_remote_windows
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.remote_shutdown_switch
+        icon_template: "mdi:power"
+
+# 定义输入文本实体用于跟踪状态
+input_text:
+  monitor1_state:
+    name: LG显示器 State
+    initial: 'macos'
+    max: 10
+  
+  monitor2_state:
+    name: AG显示器 State
+    initial: 'macos'
+    max: 10
+
+# 定义输入布尔值用于跟踪远程关机开关状态
+input_boolean:
+  remote_shutdown_switch:
+    name: "Windows远程关机开关"
+    initial: off
+    
+# 统一传感器配置
+sensor:
+  - platform: template
+    sensors:
+      # KVM状态传感器
+      kvm_current_state:
+        friendly_name: "KVM当前状态"
+        unique_id: "template_sensor_kvm_current_state"
+        value_template: >
+          {{ 'Windows' if is_state('light.zimi_cn_1057968526_dhkg02_s_10_indicator_light', 'on') else 'MacOS' }}
+        icon_template: "mdi:switch"
+      
+      # Windows11电脑状态传感器
+      windows_pc_power_state:
+        friendly_name: "Windows电脑状态（功率检测）"
+        unique_id: "template_sensor_windows_pc_power_state"
+        value_template: >
+          {{ 'On' if (states('sensor.chuangmi_cn_494346355_212a01_electric_power_p_5_6') | float(0) > 5.0) else 'Off' }}
+        icon_template: >
+          {{ 'mdi:laptop-on' if is_state('sensor.windows_pc_power_state', 'On') else 'mdi:laptop-off' }}
+          

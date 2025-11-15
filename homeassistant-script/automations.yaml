@@ -1,0 +1,165 @@
+- id: '1760714015667'
+  alias: 单击PTX无线开关-切换显示器输入源以及KVM输入源
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - event.090615_cn_blt_3_1l0v9migcc400_btsw1_click_e_2_1012
+  conditions: []
+  actions:
+  - action: light.turn_on
+    metadata: {}
+    data: {}
+    target:
+      entity_id:
+      - light.zimi_cn_1057968526_dhkg02_s_10_indicator_light
+      - light.monitor2_input
+      - light.monitor1_input
+  mode: single
+- id: '1760714307049'
+  alias: 小米无线开关长按，lg显示器切换状态
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - event.lumi_cn_blt_3_1l0j924ct8800_mcn001_click_e_3_1012
+  conditions: []
+  actions:
+  - action: light.toggle
+    metadata: {}
+    data: {}
+    target:
+      entity_id: light.monitor1_input
+  mode: single
+- id: '1760714385388'
+  alias: 小米无线开关双击，切换ag显示器状态
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - event.lumi_cn_blt_3_1l0j924ct8800_mcn001_double_click_e_3_1013
+  conditions: []
+  actions:
+  - action: light.toggle
+    metadata: {}
+    data: {}
+    target:
+      entity_id: light.monitor2_input
+  mode: single
+- id: '1760852477188'
+  alias: 小米无线开关控制KVM
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - event.lumi_cn_blt_3_1l0j924ct8800_mcn001_long_press_e_3_1014
+  conditions: []
+  actions:
+  - action: light.toggle
+    metadata: {}
+    data: {}
+    target:
+      entity_id: light.zimi_cn_1057968526_dhkg02_s_10_indicator_light
+    enabled: true
+  mode: single
+- id: '1760863198332'
+  alias: 双击切换到mac模式
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - event.090615_cn_blt_3_1l0v9migcc400_btsw1_double_click_e_2_1013
+  conditions: []
+  actions:
+  - action: light.turn_off
+    metadata: {}
+    data: {}
+    target:
+      entity_id:
+      - light.zimi_cn_1057968526_dhkg02_s_10_indicator_light
+      - light.monitor1_input
+      - light.monitor2_input
+  mode: single
+- id: '1762852354876'
+  alias: 新建自动化
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - event.090615_cn_blt_3_1l0v9migcc400_btsw1_long_press_e_2_1014
+  conditions: []
+  actions:
+  - action: light.toggle
+    metadata: {}
+    data: {}
+    target:
+      entity_id: light.zimi_cn_1057968526_dhkg02_s_10_indicator_light
+    enabled: true
+  mode: single
+- id: '1763024312770'
+  alias: 当 Windows电脑状态（功率检测） 从 关闭 变为 开启，单击ptx，显示器切换至Windows模式
+  description: ''
+  triggers:
+    - trigger: state
+      entity_id:
+      - sensor.windows_pc_power_state
+      from:
+      - 'Off'
+      to:
+      - 'On'
+  conditions: []
+  actions:
+  - action: automation.trigger
+    metadata: {}
+    data:
+      skip_condition: true
+    target:
+      entity_id: automation.00
+  mode: single
+- id: '1763024439637'
+  alias: 当 Windows电脑状态（功率检测） 从 开启 变为 关闭，双击ptx，显示器切换至MacOS模式
+  description: ''
+  triggers:
+    - trigger: state
+      entity_id:
+      - sensor.windows_pc_power_state
+      from:
+      - 'On'
+      to:
+      - 'Off'
+  conditions: []
+  actions:
+  - action: automation.trigger
+    metadata: {}
+    data:
+      skip_condition: true
+    target:
+      entity_id: automation.shuang_ji_qie_huan_dao_macmo_shi
+  mode: single
+- id: '1763024500001'
+  alias: 巴法云MQTT消息控制开关机灯
+  description: 接收巴法云MQTT消息控制开关机灯
+  triggers:
+  - trigger: mqtt
+    topic: yAN62nO9W001
+  conditions: []
+  actions:
+  - service: light.turn_{{ trigger.payload }}
+    target:
+      entity_id: light.windows11_power
+  mode: single
+- id: '1763024500002'
+  alias: 开关机灯状态同步到巴法云MQTT
+  description: 将开关机灯状态同步到巴法云MQTT主题
+  triggers:
+  - trigger: state
+    entity_id:
+    - light.windows11_power
+  conditions: []
+  actions:
+  - service: mqtt.publish
+    data:
+      topic: yAN62nO9W001
+      payload: '{{ ''on'' if is_state(''light.windows11_power'', ''on'') else ''off''
+        }}'
+  mode: single
