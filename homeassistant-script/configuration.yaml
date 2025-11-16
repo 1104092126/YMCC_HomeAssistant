@@ -1,28 +1,35 @@
-# Home Assistant 配置文件 - HTTP 优化版本
-# 使用 BetterDisplay HTTP API 替代 SSH + Shell 脚本
-# 优势：
-# 1. 无需 SSH 连接，减少网络依赖
-# 2. 响应速度更快
-# 3. 配置更简洁
-# 4. 更好的错误处理能力
-
 # =============================================================================
-# ⚙️ 配置变量说明
+# ⚙️ 全局变量配置
 # =============================================================================
-#
-# 所有配置变量都在 secrets.yaml 文件中定义
-# 请编辑 homeassistant-script/secrets.yaml 文件来修改配置
-#
-# 配置变量列表：
-# - betterdisplay_host: BetterDisplay 主机地址
-# - betterdisplay_port: BetterDisplay HTTP 端口
-# - remote_windows_ip: Windows PC IP 地址
-# - remote_windows_username: Windows PC 用户名
-# - reverse_proxy_ip: 反向代理 IP（可选）
-# - betterdisplay_token: BetterDisplay API Token（可选）
-#
-# 在下方代码中使用 !secret 来引用这些变量
+# 这些变量需要在下面的代码中替换为你的实际值
+# 由于shell_command 不支持变量替换，所以需要手动替换
+# 例如：   显示器1切换到 Windows
+#           switch_monitor1_to_windows: >
+#             curl -s http://betterdisplay_host:betterdisplay_portset?namelike=LG%20ULTRAGEAR&ddcAlt=208&vcp=inputSelectAlt&token=betterdisplay_token
+#         修改为：
+#         显示器1切换到 Windows
+#           switch_monitor1_to_windows: >
+#             curl -s http://192.168.31.236:55777?namelike=LG%20ULTRAGEAR&ddcAlt=208&vcp=inputSelectAlt&token=homeassistant
 # =============================================================================
+# globals:
+#   # BetterDisplay 配置
+#   betterdisplay_host: localhost # BetterDisplay 运行的 Mac 主机地址
+#   betterdisplay_port: 55777    # BetterDisplay HTTP 服务端口（默认 55777）
+#   betterdisplay_token: "homeassistant" # BetterDisplay HTTP API 访问令牌（如果设置了）
+  
+#   # 显示器1配置 (LG ULTRAGEAR)
+#   monitor1_name: "LG ULTRAGEAR" # 显示器1 名称（用于 BetterDisplay API）
+#   monitor1_windows_input: 208  # DDC Alt 值 for Windows
+#   monitor1_macos_input: 144    # DDC Alt 值 for macOS
+  
+#   # 显示器2配置 (AG273QG3R3B)
+#   monitor2_name: "AG273QG3R3B" # 显示器2 名称（用于 BetterDisplay API）
+#   monitor2_windows_input: 17   # DDC 值 for Windows
+#   monitor2_macos_input: 15     # DDC 值 for macOS
+  
+#   # 远程 Windows 配置
+#   remote_windows_user: "11040" # Windows PC 的用户名
+#   remote_windows_ip: "192.168.31.10" # Windows PC 的 IP 地址  
 
 # =============================================================================
 # 基础配置
@@ -48,7 +55,7 @@ scene: !include scenes.yaml
 http:
   use_x_forwarded_for: true
   trusted_proxies:
-    - !secret reverse_proxy_ip
+    - "192.168.31.1"
 
 # =============================================================================
 # Shell命令配置 - 使用 BetterDisplay HTTP API
@@ -60,24 +67,28 @@ http:
 # 显示器2 (AG273QG3R3B) 切换到 macOS
 # 远程关机 Windows（此功能仍需 SSH，因为 Windows 不支持 BetterDisplay）
 
-# 如果 BetterDisplay 设置了访问令牌，在下面的命令 URL 末尾添加 &token=your_token_here
 
+# ⚠️ 重要提醒：以下占位符必须手动替换为实际值，否则命令无法执行！
+# 示例：
+#   betterdisplay_host  → 192.168.31.236
+#   betterdisplay_port  → 55777
+#   betterdisplay_token → homeassistant
 shell_command:
   # 显示器1切换到 Windows
   switch_monitor1_to_windows: >
-    curl -s http://192.168.31.236:55777/set?namelike=LG%20ULTRAGEAR&ddcAlt=208&vcp=inputSelectAlt&token=homeassistant
+    curl -s http://betterdisplay_host:betterdisplay_port/set?namelike=LG%20ULTRAGEAR&ddcAlt=208&vcp=inputSelectAlt&token=betterdisplay_token
   # 显示器1切换到 macOS
   switch_monitor1_to_macos: >
-    curl -s http://192.168.31.236:55777/set?namelike=LG%20ULTRAGEAR&ddcAlt=144&vcp=inputSelectAlt&token=homeassistant
+    curl -s http://betterdisplay_host:betterdisplay_port/set?namelike=LG%20ULTRAGEAR&ddcAlt=144&vcp=inputSelectAlt&token=betterdisplay_token
   # 显示器2切换到 Windows
   switch_monitor2_to_windows: >
-    curl -s http://192.168.31.236:55777/set?namelike=AG273QG3R3B&ddc=17&vcp=inputSelect&token=homeassistant
+    curl -s http://betterdisplay_host:betterdisplay_port/set?namelike=AG273QG3R3B&ddc=17&vcp=inputSelect&token=betterdisplay_token
   # 显示器2切换到 macOS
   switch_monitor2_to_macos: >
-    curl -s http://192.168.31.236:55777/set?namelike=AG273QG3R3B&ddc=15&vcp=inputSelect&token=homeassistant
+    curl -s http://betterdisplay_host:betterdisplay_port/set?namelike=AG273QG3R3B&ddc=15&vcp=inputSelect&token=betterdisplay_token
   # 远程关机 Windows（此功能仍需 SSH，因为 Windows 不支持 BetterDisplay）
   shutdown_remote_windows: >
-    ssh {{ secrets.remote_windows_username }}@{{ secrets.remote_windows_ip }} "shutdown /s /t 0"
+    ssh remote_windows_user@remote_windows_ip "shutdown /s /t 5"
 
 # =============================================================================
 # 模板开关配置
