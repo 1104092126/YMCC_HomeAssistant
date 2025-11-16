@@ -2,6 +2,25 @@
 
 > 💡 一个基于Home Assistant的智能显示器与PC控制解决方案，通过BetterDisplay API实现显示器输入源无缝切换，通过SSH实现Windows远程关机，为您打造高效便捷的多设备工作环境。
 
+## 🚀 快速开始
+
+### 1. 核心组件安装
+```bash
+# 1. 安装BetterDisplay (Mac端)
+# 官方地址：https://betterdisplay.pro/
+
+# 2. 配置Home Assistant
+cp homeassistant-script/* /path/to/homeassistant/config/
+```
+
+### 2. 关键配置步骤
+1. 📺 在Mac上启用BetterDisplay HTTP API
+2. 🎯 在HA中配置BetterDisplay连接参数
+3. 🔑 配置SSH免密登录到Windows PC
+4. ⏯️ 设置WOL唤醒功能
+
+---
+
 ## 🎯 项目背景
 
 在多设备工作环境中，频繁手动切换显示器输入源和控制PC开关机是一件繁琐的事情。本方案旨在通过Home Assistant整合BetterDisplay和SSH技术，实现显示器输入源自动/手动切换和PC远程控制，提升工作效率和用户体验。
@@ -76,7 +95,12 @@ flowchart LR
 # - 配置API访问令牌（可选但推荐，用于安全访问）
 
 # 4. 验证API可用性
+# 测试调节显示器亮度到80%（MyDisplay为您的显示器名称）
+# 如果执行成功，显示器亮度会立即变化
 curl http://localhost:55777/set?name=MyDisplay&brightness=0.8
+
+# 或者使用带令牌的验证命令（如果已配置API令牌）
+curl http://localhost:55777/set?name=MyDisplay&brightness=0.8&token=YOUR_API_TOKEN
 ```
 
 #### 2. Home Assistant配置
@@ -95,6 +119,28 @@ nano /path/to/homeassistant/config/configuration.yaml
 ### 💡 实现方法
 
 #### 1. API调用原理
+通过BetterDisplay官方HTTP API发送DDC/CI命令实现输入源切换和显示器控制。
+
+##### 📌 name vs namelike参数区别
+API支持两种方式指定显示器：
+
+| 参数 | 匹配方式 | 特点 | 适用场景 |
+|------|----------|------|----------|
+| **`name`** | 精确匹配 | 区分大小写，完全匹配显示器名称 | 已知显示器确切名称且唯一时使用，性能最佳 |
+| **`namelike`** | 模糊匹配 | 不区分大小写，支持部分匹配 | 显示器名称较长、不确定完整名称或需要批量匹配时使用 |
+
+**示例说明：**
+- 显示器完整名称：`LG ULTRAGEAR 27GP850`
+  - 精确匹配：`name=LG%20ULTRAGEAR%2027GP850` ✅
+  - 模糊匹配：`namelike=ultragear` ✅（不区分大小写）
+  - 模糊匹配：`namelike=27GP850` ✅（部分匹配）
+  - 模糊匹配：`namelike=gp850` ✅（不区分大小写，部分匹配）
+
+- 显示器完整名称：`Samsung Odyssey G7`
+  - 精确匹配：`name=Samsung%20Odyssey%20G7` ✅
+  - 模糊匹配：`namelike=odyssey` ✅（不区分大小写）
+  - 模糊匹配：`namelike=g7` ✅（部分匹配）
+
 通过BetterDisplay官方HTTP API发送DDC/CI命令实现输入源切换：
 
 ```yaml
@@ -105,20 +151,70 @@ curl -s http://192.168.1.100:12345/set?namelike=LG%20ULTRAGEAR%2027GP850&ddcAlt=
 # AG273QG3R3B切换到macOS (使用标准DDC命令)
 # 注意：请将以下参数替换为您的实际配置
 curl -s http://192.168.1.100:12345/set?namelike=AG273QG3R3B&ddc=17&vcp=inputSelect&token=abcdef123456
+
+# 调节显示器亮度到80% (brightness范围: 0-1，0=最暗，1=最亮)
+# 使用模糊匹配namelike参数 (适用于不确定完整名称或名称较长的情况)
+# 注意：请将以下参数替换为您的实际配置
+curl -s http://192.168.1.100:12345/set?namelike=MyDisplay&brightness=0.8&token=abcdef123456
+
+# 使用精确匹配name参数 (适用于已知确切名称且名称唯一的情况)
+# 注意：请将以下参数替换为您的实际配置
+curl -s http://192.168.1.100:12345/set?name=MyDisplay&brightness=0.8&token=abcdef123456
+
+# 调节显示器对比度到50% (contrast范围: 0-1，0=最低，1=最高)
+# 注意：请将以下参数替换为您的实际配置
+curl -s http://192.168.1.100:12345/set?namelike=MyDisplay&contrast=0.5&token=abcdef123456
+
+# 调节显示器音量到20% (volume范围: 0-1，0=静音，1=最大，部分显示器不支持)
+# 注意：请将以下参数替换为您的实际配置
+curl -s http://192.168.1.100:12345/set?namelike=MyDisplay&volume=0.2&token=abcdef123456
+
+# 示例：使用精确匹配name参数调节亮度 (适合名称唯一的显示器)
+curl -s http://192.168.1.100:12345/set?name=My%20Display%2027&brightness=0.6&token=abcdef123456
+
+# 示例：使用模糊匹配namelike参数调节对比度 (适合名称较长或不确定完整名称的显示器)
+curl -s http://192.168.1.100:12345/set?namelike=27&contrast=0.7&token=abcdef123456
 ```
 
-### 📝 替换规则说明
-在实际使用中，您需要将以下参数替换为您的真实配置：
+### 📝 配置参数
+
+#### 1. API参数替换规则
+在实际使用API调用时，您需要将以下参数替换为您的真实配置：
 
 | 参数名 | 说明 | 示例值 |
 |-------|------|--------|
 | `192.168.1.100` | BetterDisplay运行的macOS设备IP地址 | 您的macOS设备IP |
 | `12345` | BetterDisplay的HTTP服务端口 | 您在BetterDisplay中设置的端口 |
-| `LG%20ULTRAGEAR%2027GP850` | 显示器名称的URL编码 | 使用`urlencode`处理您的显示器名称 |
+| `name=My%20Display%2027` | 精确匹配显示器名称（区分大小写） | 使用`urlencode`处理完整显示器名称 |
+| `namelike=27` | 模糊匹配显示器名称（不区分大小写） | 使用`urlencode`处理部分显示器名称 |
+| `LG%20ULTRAGEAR%2027GP850` / `MyDisplay` | 显示器名称的URL编码 | 使用`urlencode`处理您的显示器名称 |
 | `15` / `17` | 显示器输入源的DDC码 | 参考显示器说明书或BetterDisplay中的值 |
+| `0.8` | 亮度值（范围0-1，0=最暗，1=最亮） | 0.5（50%亮度） |
+| `0.5` | 对比度值（范围0-1，0=最低，1=最高） | 0.7（70%对比度） |
+| `0.2` | 音量值（范围0-1，0=静音，1=最大，部分显示器不支持） | 0.5（50%音量） |
 | `abcdef123456` | BetterDisplay的API令牌 | 您在BetterDisplay中生成的API令牌 |
 
-#### 2. 模板开关设计
+#### 2. Home Assistant配置变量
+在`configuration.yaml`文件中配置以下全局变量：
+
+```yaml
+# BetterDisplay 配置
+betterdisplay_host: localhost      # BetterDisplay运行的Mac主机地址
+betterdisplay_port: 55777         # BetterDisplay HTTP服务端口
+betterdisplay_token: "homeassistant"  # BetterDisplay API安全令牌
+
+# 显示器1配置 (LG ULTRAGEAR)
+monitor1_name: "LG ULTRAGEAR"  # 显示器名称（需与BetterDisplay中一致）
+monitor1_windows_input: 208     # DDC Alt值 for Windows输入源
+monitor1_macos_input: 144       # DDC Alt值 for macOS输入源
+
+# 显示器2配置 (AG273QG3R3B)
+monitor2_name: "AG273QG3R3B"    # 显示器名称（需与BetterDisplay中一致）
+monitor2_windows_input: 17       # DDC值 for Windows输入源
+monitor2_macos_input: 15         # DDC值 for macOS输入源
+```
+
+#### 3. 模板开关设计
 将显示器切换功能封装为Home Assistant模板开关：
 
 ```yaml
@@ -138,7 +234,7 @@ light:
         }
 ```
 
-#### 3. 状态存储机制
+#### 4. 状态存储机制
 使用input_text实体存储显示器当前输入源状态：
 
 ```yaml
@@ -151,27 +247,6 @@ input_text:
     name: AG显示器 State
     initial: 'macos'  # 初始状态
     max: 10
-```
-
-### ⚙️ 需要修改的变量
-
-在`configuration.yaml`文件中配置以下全局变量：
-
-```yaml
-# BetterDisplay 配置
-betterdisplay_host: localhost      # BetterDisplay运行的Mac主机地址
-betterdisplay_port: 55777         # BetterDisplay HTTP服务端口
-betterdisplay_token: "homeassistant"  # BetterDisplay API安全令牌
-
-# 显示器1配置 (LG ULTRAGEAR)
-monitor1_name: "LG ULTRAGEAR"  # 显示器名称（需与BetterDisplay中一致）
-monitor1_windows_input: 208     # DDC Alt值 for Windows输入源
-monitor1_macos_input: 144       # DDC Alt值 for macOS输入源
-
-# 显示器2配置 (AG273QG3R3B)
-monitor2_name: "AG273QG3R3B"    # 显示器名称（需与BetterDisplay中一致）
-monitor2_windows_input: 17       # DDC值 for Windows输入源
-monitor2_macos_input: 15         # DDC值 for macOS输入源
 ```
 
 ---
@@ -222,7 +297,62 @@ button:
 ### 💡 实现方法
 
 #### 1. 远程关机实现
-通过SSH连接到Windows PC并执行关机命令：
+远程关机依赖SSH免密登录，**必须先配置HA公钥到Windows PC**，否则会提示密码输入导致命令失败！
+
+##### 1.1 配置SSH公钥（关键步骤）🔑
+
+**步骤1：在HA上生成SSH密钥对**
+```bash
+# 登录HA终端，执行以下命令生成密钥对（一路回车默认配置即可）
+ssh-keygen -t rsa -b 2048
+# 输出提示：Generating public/private rsa key pair...（表示生成成功）
+```
+
+**步骤2：查看HA的公钥内容**
+```bash
+# 生成后，查看公钥内容（需复制完整输出，包括ssh-rsa开头的全部内容）
+curl -X GET http://localhost:8123/api/hassio_ssh/key
+# 示例输出：ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD3... root@homeassistant
+```
+
+**步骤3：将公钥配置到Windows PC**
+```bash
+# 1. 登录Windows PC，打开CMD终端
+# 2. 创建.ssh目录（若已存在则跳过）
+mkdir %USERPROFILE%\.ssh
+
+# 3. 创建authorized_keys文件并粘贴HA公钥
+notepad %USERPROFILE%\.ssh\authorized_keys
+# ✅ 注意事项：
+# - 确保公钥是单行完整内容，没有换行
+# - 不要添加任何额外的空格或注释
+# 粘贴完成后保存关闭
+
+# 4. 设置文件权限（必须用PowerShell执行，否则免密登录会失败！）
+icacls %USERPROFILE%\.ssh /inheritance:r
+icacls %USERPROFILE%\.ssh /grant:r "%USERNAME%:F"
+icacls %USERPROFILE%\.ssh\authorized_keys /grant:r "%USERNAME%:F"
+# ✅ 权限设置说明：
+# - /inheritance:r：移除继承的权限
+# - /grant:r "%USERNAME%:F"：仅给予当前用户完全控制权限
+```
+
+**步骤4：测试SSH连接（验证配置）**
+```bash
+# 在HA终端执行以下命令测试连接（替换为实际参数）
+ssh username@192.168.1.101 "echo '✅ Connection Test Successful!'"
+# ✅ 成功：输出"Connection Test Successful!"
+# ❌ 失败：提示输入密码（请检查公钥是否正确配置或权限是否设置正确）
+```
+
+**🔧 故障排除提示**
+1. **权限问题**：确保authorized_keys文件只有当前用户有访问权限
+2. **公钥格式**：确保公钥是完整的单行内容，没有换行或额外字符
+3. **IP地址/用户名**：确保使用正确的Windows PC IP地址和用户名
+4. **SSH服务**：确保Windows PC上的SSH服务正在运行（net start sshd）
+
+##### 1.2 配置HA远程关机命令
+公钥配置完成后，在HA的`configuration.yaml`中添加关机命令：
 
 ```yaml
 # 远程关机命令配置
