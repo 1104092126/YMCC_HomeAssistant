@@ -1,95 +1,88 @@
+# Home Assistant 配置文件 - HTTP 优化版本
+# 使用 BetterDisplay HTTP API 替代 SSH + Shell 脚本
+# 优势：
+# 1. 无需 SSH 连接，减少网络依赖
+# 2. 响应速度更快
+# 3. 配置更简洁
+# 4. 更好的错误处理能力
 
-# Home Assistant 主配置文件
-# 本文件定义了Home Assistant的核心配置和模块化结构
+# =============================================================================
+# ⚙️ 配置变量说明
+# =============================================================================
+#
+# 所有配置变量都在 secrets.yaml 文件中定义
+# 请编辑 homeassistant-script/secrets.yaml 文件来修改配置
+#
+# 配置变量列表：
+# - betterdisplay_host: BetterDisplay 主机地址
+# - betterdisplay_port: BetterDisplay HTTP 端口
+# - remote_windows_ip: Windows PC IP 地址
+# - remote_windows_username: Windows PC 用户名
+# - reverse_proxy_ip: 反向代理 IP（可选）
+# - betterdisplay_token: BetterDisplay API Token（可选）
+#
+# 在下方代码中使用 !secret 来引用这些变量
+# =============================================================================
 
 # =============================================================================
 # 基础配置
 # =============================================================================
 
-# 默认集成配置 - 加载Home Assistant的默认集成组件
-# 包含常用功能如天气、地图、日志、设备发现等，请勿移除
-# 详细说明: https://www.home-assistant.io/integrations/default_config/
 default_config:
 
-# =============================================================================
-# 前端配置
-# =============================================================================
-
-# 前端配置 - 控制Home Assistant的用户界面
 frontend:
-  # 从themes文件夹加载自定义主题
-  # 主题文件需放置在config目录下的themes文件夹中ƒƒ
   themes: !include_dir_merge_named themes
 
 # =============================================================================
 # 模块化配置引用
 # =============================================================================
 
-# 自动化配置 - 引用外部的automations.yaml文件
-# 所有自动化规则都应在该文件中定义
 automation: !include automations.yaml
-
-# 脚本配置 - 引用外部的scripts.yaml文件
-# 所有脚本都应在该文件中定义
 script: !include scripts.yaml
-
-# 场景配置 - 引用外部的scenes.yaml文件
-# 所有场景都应在该文件中定义
 scene: !include scenes.yaml
 
 # =============================================================================
-# 可选配置项示例
+# HTTP配置
 # =============================================================================
 
-# 以下是一些常用配置项的示例，取消注释并根据需要进行配置
-
-# 日志配置
-# logger:
-#   default: info
-#   logs:
-#     homeassistant.components.light: debug
-
-# HTTP配置 - 用于远程访问
-# http:
-#   ssl_certificate: /ssl/fullchain.pem
-#   ssl_key: /ssl/privkey.pem
-#   server_port: 8123
-
-# 时间日期格式配置
-# homeassistant:
-#   customize:
-#     sensor.date: 
-#       friendly_name: "日期"
-#     sensor.time: 
-#       friendly_name: "时间"
-
-# HTTP配置
 http:
   use_x_forwarded_for: true
   trusted_proxies:
-    - YOUR_REVERSE_PROXY_IP  # 这里填写你的反向代理服务器IP
-    # 如果有多个反向代理，继续添加其他IP，例如：
-    # - 192.168.1.100
+    - !secret reverse_proxy_ip
+
+# =============================================================================
+# Shell命令配置 - 使用 BetterDisplay HTTP API
+# =============================================================================
+#
+# 显示器1 (LG ULTRAGEAR) 切换到 Windows
+# 显示器1 (LG ULTRAGEAR) 切换到 macOS
+# 显示器2 (AG273QG3R3B) 切换到 Windows
+# 显示器2 (AG273QG3R3B) 切换到 macOS
+# 远程关机 Windows（此功能仍需 SSH，因为 Windows 不支持 BetterDisplay）
+
+# 如果 BetterDisplay 设置了访问令牌，在下面的命令 URL 末尾添加 &token=your_token_here
+
+shell_command:
+  # 显示器1切换到 Windows
+  switch_monitor1_to_windows: >
+    curl -s http://192.168.31.236:55777/set?namelike=LG%20ULTRAGEAR&ddcAlt=208&vcp=inputSelectAlt&token=homeassistant
+  # 显示器1切换到 macOS
+  switch_monitor1_to_macos: >
+    curl -s http://192.168.31.236:55777/set?namelike=LG%20ULTRAGEAR&ddcAlt=144&vcp=inputSelectAlt&token=homeassistant
+  # 显示器2切换到 Windows
+  switch_monitor2_to_windows: >
+    curl -s http://192.168.31.236:55777/set?namelike=AG273QG3R3B&ddc=17&vcp=inputSelect&token=homeassistant
+  # 显示器2切换到 macOS
+  switch_monitor2_to_macos: >
+    curl -s http://192.168.31.236:55777/set?namelike=AG273QG3R3B&ddc=15&vcp=inputSelect&token=homeassistant
+  # 远程关机 Windows（此功能仍需 SSH，因为 Windows 不支持 BetterDisplay）
+  shutdown_remote_windows: >
+    ssh {{ secrets.remote_windows_username }}@{{ secrets.remote_windows_ip }} "shutdown /s /t 0"
 
 # =============================================================================
 # 模板开关配置
 # =============================================================================
 
-# 模板开关 - 允许基于其他实体状态或条件创建自定义开关
-# 可以直接在configuration.yaml中添加，也可以创建单独的文件并引用
-
-# 简化版显示器输入源灯光模板
-# 此配置文件提供了一个更简洁的方式，将显示器输入源切换功能配置为灯光实体
-
-# 定义shell命令
-shell_command:
-  switch_monitor1_to_windows: 'ssh YOUR_MAC_USERNAME@YOUR_MAC_IP "bash /path/to/your/Screen11.sh"'
-  switch_monitor1_to_macos: 'ssh YOUR_MAC_USERNAME@YOUR_MAC_IP "bash /path/to/your/Screen12.sh"'
-  switch_monitor2_to_windows: 'ssh YOUR_MAC_USERNAME@YOUR_MAC_IP "bash /path/to/your/Screen21.sh"'
-  switch_monitor2_to_macos: 'ssh YOUR_MAC_USERNAME@YOUR_MAC_IP "bash /path/to/your/Screen22.sh"'
-  shutdown_remote_windows: 'ssh YOUR_MAC_USERNAME@YOUR_MAC_IP "bash /path/to/your/shutdown-remote.sh"'
-
-# 定义灯光实体
 light:
   - platform: template
     lights:
@@ -152,7 +145,10 @@ light:
               entity_id: input_boolean.remote_shutdown_switch
         icon_template: "mdi:power"
 
-# 定义输入文本实体用于跟踪状态
+# =============================================================================
+# 输入实体配置
+# =============================================================================
+
 input_text:
   monitor1_state:
     name: LG显示器 State
@@ -164,13 +160,15 @@ input_text:
     initial: 'macos'
     max: 10
 
-# 定义输入布尔值用于跟踪远程关机开关状态
 input_boolean:
   remote_shutdown_switch:
     name: "Windows远程关机开关"
     initial: off
-    
-# 统一传感器配置
+
+# =============================================================================
+# 传感器配置
+# =============================================================================
+
 sensor:
   - platform: template
     sensors:
@@ -190,4 +188,4 @@ sensor:
           {{ 'On' if (states('sensor.chuangmi_cn_494346355_212a01_electric_power_p_5_6') | float(0) > 5.0) else 'Off' }}
         icon_template: >
           {{ 'mdi:laptop-on' if is_state('sensor.windows_pc_power_state', 'On') else 'mdi:laptop-off' }}
-          
+
