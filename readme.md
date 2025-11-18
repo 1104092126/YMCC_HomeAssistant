@@ -37,42 +37,127 @@ cp homeassistant-script/* /path/to/homeassistant/config/
 
 ```mermaid
 flowchart LR
-    A[Home Assistant] -->|HTTP API| B[BetterDisplay on Mac]
-    B -->|DDC/CI| C[LG ULTRAGEAR 显示器]
-    B -->|DDC/CI| D[AG273QG3R3B 显示器]
-    A -->|SSH| E[Windows PC]
-    A -->|WOL Magic Packet| F[网络设备]
-    F --> G[Windows PC]
-    A -->|传感器数据| H[UPS/功率计]
-    H --> A
+    %% 核心组件
+    A[Home Assistant] <-->|HTTP API| B[BetterDisplay on Mac]
+    A <-->|SSH| C[Windows PC]
+    A -->|WOL 魔术包| D[网络设备]
+    A <-->|MQTT| E[巴法云MQTT Broker]
     
+    %% 传感器组件
+    F[KVM 传感器] -->|KVM 状态| A
+    G[小米智能插座] -->|功率数据| A
+    
+    %% 显示系统
+    B -->|DDC/CI| H[LG ULTRAGEAR 显示器]
+    B -->|DDC/CI| I[AG273QG3R3B 显示器]
+    
+    %% 连接关系
+    D --> C
+    E <-->|语音助手控制| J[小爱/天猫精灵/小度]
+    
+    %% 子图分组
     subgraph 显示系统
-    C
-    D
+    H
+    I
     end
     
     subgraph 控制系统
     A
     B
-    E
+    C
+    D
     F
-    H
+    G
     end
     
+    subgraph 云服务
+    E
+    J
+    end
+    
+    %% 样式设置
     style A fill:#66ccff,stroke:#333,stroke-width:2px
     style B fill:#ff9900,stroke:#333,stroke-width:2px
-    style C fill:#339966,stroke:#333,stroke-width:2px
-    style D fill:#339966,stroke:#333,stroke-width:2px
-    style E fill:#ff6666,stroke:#333,stroke-width:2px
-    style F fill:#9966cc,stroke:#333,stroke-width:2px
-    style H fill:#9966cc,stroke:#333,stroke-width:2px
+    style C fill:#ff6666,stroke:#333,stroke-width:2px
+    style E fill:#9933ff,stroke:#333,stroke-width:2px
+    style F fill:#33cc99,stroke:#333,stroke-width:2px
+    style G fill:#33cc99,stroke:#333,stroke-width:2px
+    style H fill:#339966,stroke:#333,stroke-width:2px
+    style I fill:#339966,stroke:#333,stroke-width:2px
+```
+
+## ⚙️ 工作原理图
+
+```mermaid
+sequenceDiagram 
+    participant BEMFA as 巴法云
+    participant HA as Home Assistant
+    participant BetterDisplay as BetterDisplay
+    participant SSH as SSH Client
+    participant Monitor1 as LG显示器
+    participant Monitor2 as AG显示器
+    participant PC as Windows PC
+    participant Switch1 as PTX无线开关
+    participant Switch2 as 小米无线开关
+    participant Sensor as 功率传感器
+    participant KVM as KVM设备
+
+    Note over BEMFA, HA: MQTT双向通信 - 开关机控制
+    BEMFA->>HA: MQTT消息(on/off) 到主题 yAN62nO9W001
+    HA->>HA: 解析消息类型
+    alt 消息为"on"（开机请求）
+        HA->>PC: 发送WOL魔法包唤醒电脑
+    else 消息为"off"（关机请求）
+        HA->>SSH: 执行关机脚本
+        SSH->>PC: SSH发送关机指令 "shutdown /s /t 5"
+    end
+    HA->>HA: 更新输入布尔值 remote_shutdown_switch
+    HA->>BEMFA: 同步 light.windows11_power 状态到MQTT主题
+
+    Note over Switch1, Switch2, HA: 无线开关控制 - 显示器输入源切换
+    par PTX无线开关事件
+        Switch1->>HA: 单击事件
+        HA->>BetterDisplay: 调用BetterDisplay API切换所有显示器到Windows
+        BetterDisplay->>Monitor1: DDC/CI协议切换到Windows (输入源15)
+        BetterDisplay->>Monitor2: DDC/CI协议切换到Windows (输入源17)
+        HA->>HA: 更新 input_text.monitor1_state 为 "windows"
+        HA->>HA: 更新 input_text.monitor2_state 为 "windows"
+    and 小米无线开关事件
+        Switch2->>HA: 长按事件
+        HA->>BetterDisplay: 调用BetterDisplay API切换到macOS
+        BetterDisplay->>Monitor1: DDC/CI协议切换到macOS (输入源17)
+        BetterDisplay->>Monitor2: DDC/CI协议切换到macOS (输入源15)
+        HA->>HA: 更新 input_text.monitor1_state 为 "macos"
+        HA->>HA: 更新 input_text.monitor2_state 为 "macos"
+    end
+
+    Note over PC, Sensor, HA: 状态联动 - 自动切换
+    Sensor->>HA: 检测Windows PC功率变化
+    HA->>HA: 更新 sensor.windows_pc_power_state (功率>5W为On)
+    alt Windows PC从Off到On
+        HA->>BetterDisplay: 自动切换所有显示器到Windows
+        BetterDisplay->>Monitor1: DDC/CI协议切换到Windows
+        BetterDisplay->>Monitor2: DDC/CI协议切换到Windows
+        HA->>HA: 更新显示器状态
+    else Windows PC从On到Off
+        HA->>BetterDisplay: 自动切换所有显示器到macOS
+        BetterDisplay->>Monitor1: DDC/CI协议切换到macOS
+        BetterDisplay->>Monitor2: DDC/CI协议切换到macOS
+        HA->>HA: 更新显示器状态
+    end
+
+    Note over HA, KVM: 状态同步 - KVM与显示器状态
+    HA->>HA: 检查KVM指示灯状态
+    HA->>HA: 更新 sensor.kvm_current_state (指示灯亮为Windows)
+    HA->>HA: 确保显示器状态与KVM一致
 ```
 
 ## 📋 功能概述
 
-本方案提供两个核心功能：
+本方案提供三大核心功能：
 1. **显示器输入源切换**：通过BetterDisplay API在Windows和macOS之间切换显示器输入源
 2. **远程开关机功能**：通过SSH实现Windows远程关机，通过WOL实现远程唤醒
+3. **智能音箱控制**：通过巴法云MQTT实现小爱同学/天猫精灵/小度音箱语音控制
 
 ---
 
@@ -428,6 +513,110 @@ HaYmcc/
     ├── configuration.yaml     # 主配置文件
     └── scenes.yaml            # 场景配置文件
 ```
+
+---
+
+## 🗣️ 功能三：巴法云智能音箱控制
+
+### 💡 功能介绍
+通过巴法云服务实现智能音箱（小爱同学、天猫精灵、小度）对Home Assistant设备的语音控制，主要支持：
+- 🎙️ 语音控制Windows PC开关机
+- 📺 语音控制显示器输入源切换
+- 🔄 状态实时同步到智能音箱
+
+### 🚀 部署步骤
+
+#### 1. 巴法云账号配置
+
+```bash
+# 1. 注册巴法云账号
+# 官方地址：https://www.bemfa.com/
+
+# 2. 获取UID
+# 登录后在首页即可看到您的唯一UID
+
+# 3. 创建MQTT主题
+# 进入「MQTT物联网平台」→「主题列表」→「新增主题」
+# 主题名称建议使用：yAN62nO9W001（需与现有配置一致）
+# 选择主题类型为「设备控制」
+```
+
+#### 2. Home Assistant MQTT配置
+
+在`configuration.yaml`中添加巴法云MQTT broker配置：
+
+```yaml
+# 巴法云MQTT配置
+mqtt:
+  broker: mqtt.bemfa.com  # 巴法云MQTT服务器地址
+  port: 1883              # MQTT端口，默认1883
+  client_id: YOUR_UID     # 您的巴法云UID
+  username: YOUR_UID      # 用户名与UID一致
+  password: YOUR_UID      # 密码与UID一致
+```
+
+#### 3. 智能音箱平台配置
+
+- **小爱同学**：在米家APP中添加「巴法云」技能，完成授权后即可发现设备
+- **天猫精灵**：在天猫精灵APP中添加「巴法云」技能，完成授权后即可发现设备
+- **小度音箱**：在小度APP中添加「巴法云」技能，完成授权后即可发现设备
+
+### 💡 实现方法
+
+#### 1. MQTT通信原理
+通过巴法云MQTT主题实现双向通信：
+- 智能音箱 → 巴法云MQTT → Home Assistant：语音指令控制
+- Home Assistant → 巴法云MQTT → 智能音箱：状态同步
+
+#### 2. 现有自动化实现
+
+在`automations.yaml`中已配置两个巴法云相关自动化：
+
+```yaml
+# 巴法云MQTT消息控制开关机灯
+- id: '1763024500001'
+  alias: 巴法云MQTT消息控制开关机灯
+  description: 接收巴法云MQTT消息控制开关机灯
+  triggers:
+  - trigger: mqtt
+    topic: yAN62nO9W001  # 巴法云MQTT主题
+  conditions: []
+  actions:
+  - service: light.turn_{{ trigger.payload }}
+    target:
+      entity_id: light.windows11_power
+  mode: single
+
+# 开关机灯状态同步到巴法云MQTT
+- id: '1763024500002'
+  alias: 开关机灯状态同步到巴法云MQTT
+  description: 将开关机灯状态同步到巴法云MQTT主题
+  triggers:
+  - trigger: state
+    entity_id:
+    - light.windows11_power
+  conditions: []
+  actions:
+  - service: mqtt.publish
+    data:
+      topic: yAN62nO9W001  # 巴法云MQTT主题
+      payload: '{{ ''on'' if is_state(''light.windows11_power'', ''on'') else ''off'' }}
+  mode: single
+```
+
+#### 3. 自定义扩展
+
+如需添加更多设备支持语音控制，只需：
+1. 在巴法云平台创建新的MQTT主题
+2. 在`automations.yaml`中添加对应的MQTT消息处理自动化
+3. 在智能音箱APP中完成设备绑定
+
+### ⚙️ 配置参数替换规则
+
+| 参数名 | 说明 | 示例值 |
+|-------|------|--------|
+| `YOUR_UID` | 巴法云账号UID | 1234567890 |
+| `yAN62nO9W001` | 巴法云MQTT主题 | 自定义主题名称 |
 
 ## 🚩 注意事项
 

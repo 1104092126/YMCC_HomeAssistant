@@ -160,6 +160,5 @@
   - service: mqtt.publish
     data:
       topic: yAN62nO9W001
-      payload: '{{ ''on'' if is_state(''light.windows11_power'', ''on'') else ''off''
-        }}'
+      payload: '{{ ''on'' if is_state(''light.windows11_power'', ''on'') else ''off'' }}
   mode: single
