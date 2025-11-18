@@ -90,66 +90,105 @@ flowchart LR
 
 ```mermaid
 sequenceDiagram 
-    participant BEMFA as 巴法云
+    participant Bafacloud as 巴法云
     participant HA as Home Assistant
-    participant BetterDisplay as BetterDisplay
-    participant SSH as SSH Client
-    participant Monitor1 as LG显示器
-    participant Monitor2 as AG显示器
+    participant Shell as 系统命令执行
+    participant BD as BetterDisplay
+    participant Monitor as 显示器
     participant PC as Windows PC
-    participant Switch1 as PTX无线开关
-    participant Switch2 as 小米无线开关
-    participant Sensor as 功率传感器
-    participant KVM as KVM设备
+    participant Switch as 无线开关
+    participant Sensor as 小米智能插座
+    participant MonitorLight1 as LG显示器输入源 (light.monitor1_input)
+    participant MonitorLight2 as AG显示器输入源 (light.monitor2_input)
+    participant KVMLight as KVM指示灯 (light.zimi_cn_1057968526_dhkg02_s_10_indicator_light)
+    participant PowerLight as 开关机灯 (light.windows11_power)
 
-    Note over BEMFA, HA: MQTT双向通信 - 开关机控制
-    BEMFA->>HA: MQTT消息(on/off) 到主题 yAN62nO9W001
-    HA->>HA: 解析消息类型
+    Note over Bafacloud, HA: MQTT双向通信(开关机灯控制)
+    Bafacloud->>HA: MQTT消息(on/off)
+    HA->>HA: 解析消息类型为开关机灯控制请求
+    HA->>PowerLight: 控制开关机灯状态
+    PowerLight->>PowerLight: 切换开关机灯状态
+
+    Note over Bafacloud, HA: MQTT双向通信(PC开关机)
+    Bafacloud->>HA: MQTT消息(on/off)
+    HA->>HA: 解析消息类型为PC开关机请求
     alt 消息为"on"（开机请求）
         HA->>PC: 发送WOL魔法包唤醒电脑
+        HA->>HA: 更新input_boolean.remote_shutdown_switch为开启
     else 消息为"off"（关机请求）
-        HA->>SSH: 执行关机脚本
-        SSH->>PC: SSH发送关机指令 "shutdown /s /t 5"
+        HA->>Shell: 执行关机脚本(shutdown_remote_windows)
+        Shell->>PC: 远程关机(SSH指令)
+        HA->>HA: 更新input_boolean.remote_shutdown_switch为关闭
     end
-    HA->>HA: 更新输入布尔值 remote_shutdown_switch
-    HA->>BEMFA: 同步 light.windows11_power 状态到MQTT主题
+    HA->>Bafacloud: 同步状态到MQTT主题
 
-    Note over Switch1, Switch2, HA: 无线开关控制 - 显示器输入源切换
-    par PTX无线开关事件
-        Switch1->>HA: 单击事件
-        HA->>BetterDisplay: 调用BetterDisplay API切换所有显示器到Windows
-        BetterDisplay->>Monitor1: DDC/CI协议切换到Windows (输入源15)
-        BetterDisplay->>Monitor2: DDC/CI协议切换到Windows (输入源17)
-        HA->>HA: 更新 input_text.monitor1_state 为 "windows"
-        HA->>HA: 更新 input_text.monitor2_state 为 "windows"
-    and 小米无线开关事件
-        Switch2->>HA: 长按事件
-        HA->>BetterDisplay: 调用BetterDisplay API切换到macOS
-        BetterDisplay->>Monitor1: DDC/CI协议切换到macOS (输入源17)
-        BetterDisplay->>Monitor2: DDC/CI协议切换到macOS (输入源15)
-        HA->>HA: 更新 input_text.monitor1_state 为 "macos"
-        HA->>HA: 更新 input_text.monitor2_state 为 "macos"
+    Note over Switch, HA: 无线开关控制
+    Switch->>HA: 无线开关事件(PTX/小米 单击/双击/长按)
+    HA->>HA: 解析开关事件类型
+    alt PTX无线开关单击事件(切换到Windows模式)
+        HA->>KVMLight: 开启KVM指示灯
+        HA->>MonitorLight1: 切换LG显示器到Windows
+        HA->>MonitorLight2: 切换AG显示器到Windows
+        MonitorLight1->>Shell: 执行BetterDisplay API调用(switch_monitor1_to_windows)
+        MonitorLight2->>Shell: 执行BetterDisplay API调用(switch_monitor2_to_windows)
+        Shell->>BD: 发送显示器输入源切换请求
+        BD->>Monitor: 设置显示器输入源为Windows
+        HA->>HA: 更新input_text.monitor1_state为"windows"
+        HA->>HA: 更新input_text.monitor2_state为"windows"
+    else PTX无线开关双击事件(切换到macOS模式)
+        HA->>KVMLight: 关闭KVM指示灯
+        HA->>MonitorLight1: 切换LG显示器到macOS
+        HA->>MonitorLight2: 切换AG显示器到macOS
+        MonitorLight1->>Shell: 执行BetterDisplay API调用(switch_monitor1_to_macos)
+        MonitorLight2->>Shell: 执行BetterDisplay API调用(switch_monitor2_to_macos)
+        Shell->>BD: 发送显示器输入源切换请求
+        BD->>Monitor: 设置显示器输入源为macOS
+        HA->>HA: 更新input_text.monitor1_state为"macos"
+        HA->>HA: 更新input_text.monitor2_state为"macos"
+    else PTX无线开关长按事件(切换KVM状态)
+        HA->>KVMLight: 切换KVM指示灯状态
+    else 小米无线开关单击事件(切换LG显示器状态)
+        HA->>MonitorLight1: 切换LG显示器状态
+        MonitorLight1->>Shell: 执行BetterDisplay API调用
+        Shell->>BD: 发送LG显示器输入源切换请求
+        BD->>Monitor: 设置LG显示器输入源
+        HA->>HA: 更新input_text.monitor1_state
+    else 小米无线开关双击事件(切换AG显示器状态)
+        HA->>MonitorLight2: 切换AG显示器状态
+        MonitorLight2->>Shell: 执行BetterDisplay API调用
+        Shell->>BD: 发送AG显示器输入源切换请求
+        BD->>Monitor: 设置AG显示器输入源
+        HA->>HA: 更新input_text.monitor2_state
+    else 小米无线开关长按事件(切换KVM状态)
+        HA->>KVMLight: 切换KVM指示灯状态
     end
 
-    Note over PC, Sensor, HA: 状态联动 - 自动切换
-    Sensor->>HA: 检测Windows PC功率变化
-    HA->>HA: 更新 sensor.windows_pc_power_state (功率>5W为On)
-    alt Windows PC从Off到On
-        HA->>BetterDisplay: 自动切换所有显示器到Windows
-        BetterDisplay->>Monitor1: DDC/CI协议切换到Windows
-        BetterDisplay->>Monitor2: DDC/CI协议切换到Windows
-        HA->>HA: 更新显示器状态
-    else Windows PC从On到Off
-        HA->>BetterDisplay: 自动切换所有显示器到macOS
-        BetterDisplay->>Monitor1: DDC/CI协议切换到macOS
-        BetterDisplay->>Monitor2: DDC/CI协议切换到macOS
-        HA->>HA: 更新显示器状态
+    Note over Sensor, HA: 功率状态联动
+    Sensor->>HA: 功率变化（>5W/≤5W）
+    HA->>HA: 通过sensor.windows_pc_power_state分析PC电源状态
+    alt PC从关机到开机(功率>5W)
+        HA->>HA: 触发PTX无线开关单击事件自动化
+        HA->>KVMLight: 开启KVM指示灯
+        HA->>MonitorLight1: 切换LG显示器到Windows
+        HA->>MonitorLight2: 切换AG显示器到Windows
+        MonitorLight1->>Shell: 执行BetterDisplay API调用(switch_monitor1_to_windows)
+        MonitorLight2->>Shell: 执行BetterDisplay API调用(switch_monitor2_to_windows)
+        Shell->>BD: 发送显示器输入源切换请求
+        BD->>Monitor: 设置显示器输入源为Windows
+        HA->>HA: 更新input_text.monitor1_state为"windows"
+        HA->>HA: 更新input_text.monitor2_state为"windows"
+    else PC从开机到关机(功率≤5W)
+        HA->>HA: 触发PTX无线开关双击事件自动化
+        HA->>KVMLight: 关闭KVM指示灯
+        HA->>MonitorLight1: 切换LG显示器到macOS
+        HA->>MonitorLight2: 切换AG显示器到macOS
+        MonitorLight1->>Shell: 执行BetterDisplay API调用(switch_monitor1_to_macos)
+        MonitorLight2->>Shell: 执行BetterDisplay API调用(switch_monitor2_to_macos)
+        Shell->>BD: 发送显示器输入源切换请求
+        BD->>Monitor: 设置显示器输入源为macOS
+        HA->>HA: 更新input_text.monitor1_state为"macos"
+        HA->>HA: 更新input_text.monitor2_state为"macos"
     end
-
-    Note over HA, KVM: 状态同步 - KVM与显示器状态
-    HA->>HA: 检查KVM指示灯状态
-    HA->>HA: 更新 sensor.kvm_current_state (指示灯亮为Windows)
-    HA->>HA: 确保显示器状态与KVM一致
 ```
 
 ## 📋 功能概述
